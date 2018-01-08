@@ -6,9 +6,9 @@
 package controller;
 
 import java.io.IOException;
-import model.Game;
-import model.MenuChanger;
-import model.Server;
+import GameState.Game;
+import network.MenuChanger;
+import network.Server;
 import protocol.GameSelections;
 
 /**

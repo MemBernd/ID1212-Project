@@ -3,8 +3,10 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package model;
+package network;
 
+import GameState.Player;
+import GameState.Game;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -40,6 +42,7 @@ public class Server implements Runnable {
     //private final Queue<ByteBuffer> messageToSend = new ArrayDeque<>();
     private ByteBuffer messageReceived = ByteBuffer.allocateDirect(Constants.MAX_LENGTH);
     private boolean stop = false;
+    private boolean timeToEnter = false;
 
     
     private Selector selector;
@@ -56,6 +59,7 @@ public class Server implements Runnable {
         serverChannel = ServerSocketChannel.open();
         serverChannel.configureBlocking(false);
         serverChannel.bind(new InetSocketAddress(port));
+        helper();
     }
     
     public void host() {
@@ -74,8 +78,6 @@ public class Server implements Runnable {
             
             if(join)
                 connect(server, "helper");
-            else
-                helper();
             serve();
             
         } catch (IOException e) {
@@ -118,6 +120,7 @@ public class Server implements Runnable {
                 
             }
         }
+        selector.wakeup();
     }
     
     public void sendChoice() {
@@ -144,7 +147,9 @@ public class Server implements Runnable {
                     throw new IOException();
                 Player player = convertToPlayer(msg[1]);
                 handleJoin(key, player);
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) { //selection from player received
+            } 
+            
+            else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) { //selection from player received
                 //view.print("choice");
                 Player player = (Player) key.attachment();
                 player.setChoice(GameSelections.valueOf(msg[1].toUpperCase()));
@@ -152,28 +157,36 @@ public class Server implements Runnable {
                     view.print("Round: " + game.pointsAwarded() + " Total: " + game.getScore());
                     game.newRound();
                 }
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) { //player left
+            } 
+            
+            else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) { //player left
                 Player player = (Player) key.attachment();
                 game.removePlayer(player);
                 key.channel().close();
                 key.cancel();
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.LOBBY.toString())) { //received player in lobby
+            } 
+            
+            else if (msg[0].equalsIgnoreCase(MessageTypes.LOBBY.toString())) { //received player in lobby
                 if (msg.length > 1 ) {
                     String[] players = msg[1].split(Constants.CONTENT_DELIMITER);
                     for (String player : players) {
                         connect(convertToPlayer(player));
-                        //view.print(player);
                     }
-                   
-                    sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + selfAsData());
-                    
+                    //helper();
+                    //selector.wakeup();
                 }
                 view.setInGame(true);
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.ENTER.toString())) {
+            } 
+            
+            else if (msg[0].equalsIgnoreCase(MessageTypes.ENTER.toString())) {
                 if (msg.length != 2)
                     throw new IOException();
-                playerJoined(key, convertToPlayer(msg[1]));
-            } else {
+                Player player = convertToPlayer(msg[1]);
+                if (!game.contains(player.getName()))
+                    playerJoined(key, player);
+            } 
+            
+            else {
                 view.print("unknown: " + msg[0]);
             }
         } catch (IOException e) {
@@ -194,7 +207,7 @@ public class Server implements Runnable {
                 if( player != null) {
                     temp.add(play.getName());
                     temp.add(play.getHost());
-                    temp.add(Integer.toString(player.getPort()));
+                    temp.add(Integer.toString(play.getPort()));
                 }
                 message.add(temp.toString());
             }
@@ -273,6 +286,11 @@ public class Server implements Runnable {
        //selector = Selector.open();
        
        while (!stop) {
+           if(timeToEnter) {
+               sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + selfAsData());
+               timeToEnter = false;
+           }
+           
                 selector.select();
                 Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
                 SelectionKey key;
@@ -293,7 +311,9 @@ public class Server implements Runnable {
                                     Constants.TYPE_DELIMITER + selfAsData()));
                             key.interestOps(SelectionKey.OP_WRITE);
                             join = false;
-                        }
+                        }else 
+                        timeToEnter = true;
+
                         
                     } else if(key.isReadable()) {
                         receiveMessage(key);
@@ -312,17 +332,17 @@ public class Server implements Runnable {
         Player player = new Player(name, endpoint.getHostString(), endpoint.getPort());
         game.addPlayer(player);
         channel.keyFor(selector).attach(player);
-        System.out.println("connecting to: " + player.getHost());
+        System.out.println("connecting to: " + player.getHost() + " port: " + player.getPort());
     }
     
     private void connect(Player player) throws IOException {
         SocketChannel channel = SocketChannel.open();
         channel.configureBlocking(false);
-        channel.connect(new InetSocketAddress(player.getHost(), player.getPort()));
+        channel.connect(new InetSocketAddress("localhost", player.getPort()));
         channel.register(selector, SelectionKey.OP_CONNECT);
         game.addPlayer(player);
         channel.keyFor(selector).attach(player);
-        System.out.println("connecting to: " + player.getHost());
+        System.out.println("connecting to: " + player.getHost() + " port: " + player.getPort());
     }
     
     private void helper() throws IOException {

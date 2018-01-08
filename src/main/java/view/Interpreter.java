@@ -13,8 +13,8 @@ import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 
 import java.util.Scanner;
-import model.MenuChanger;
-import model.OutputHandler;
+import network.MenuChanger;
+import network.OutputHandler;
 import protocol.GameSelections;
 
 /**

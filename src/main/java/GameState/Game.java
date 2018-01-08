@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package model;
+package GameState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,10 +53,19 @@ public class Game {
         return true;
     }
     
+    public boolean contains(String name) {
+        for (Player player : players) {
+            if (name.equals(player.getName()))
+                return true;
+        }
+        return false;
+    }
+    
     public int pointsAwarded() {
         int scissors = 0;
         int rocks = 0;
         int papers = 0;
+        int points = 0;
         switch(choice) {
             case ROCK:
                 rocks ++;
@@ -83,23 +92,26 @@ public class Game {
             }
         }
         if (scissors > 0 && rocks > 0 && papers > 0)
-            return 0;
+            points = 0;
         switch(choice) {
             case ROCK:
                 if(papers > 0)
-                    return 0;
-                return scissors;
+                    points = 0;
+                points = scissors;
+                break;
             case PAPER:
                 if(scissors > 0)
-                    return 0;
-                return rocks;
+                    points = 0;
+                points = rocks;
+                break;
             case SCISSOR:
                if(rocks > 0)
-                    return 0;
-                return papers;
-                
+                    points = 0;
+                points = papers;
+                break;
         }
-        return -1;
+        score += points;
+        return points;
     }
     
     public void newRound() {
