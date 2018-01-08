@@ -30,7 +30,7 @@ public class Player {
     }
     
     public void addMessage(ByteBuffer msg) {
-        messageToSend.add(msg);
+        getMessageToSend().add(msg);
     }
     
     /**
@@ -87,5 +87,12 @@ public class Player {
      */
     public void setChoice(GameSelections choice) {
         this.choice = choice;
+    }
+
+    /**
+     * @return the messageToSend
+     */
+    public Queue<ByteBuffer> getMessageToSend() {
+        return messageToSend;
     }
 }

@@ -111,7 +111,7 @@ public class Interpreter extends Thread implements MenuChanger {
                     default:
                         if (inGame) {
                             cancel = true;
-                            System.out.println("command routed to ingame");
+                            game(cmd.getCmd());
                         } else
                             System.out.println("invalid command, try again");
                         break;
@@ -132,11 +132,40 @@ public class Interpreter extends Thread implements MenuChanger {
                 port = Integer.parseInt(text[1]);
                 incorrect = false;
                 controller.joinGame(text[0], port);
+                
+                put.println("waiting to join. [cancel] to return to startmenu");
+                while(!cancel) {
+                    CmdHandling cmd = new CmdHandling(readLine());
+                    //System.out.println(cmd.getCmd());
+                    switch (cmd.getCmd()) {
+                        case QUIT:
+                            exit = true;
+                            break;
+                        case CANCEL:
+                            cancel = true;
+                            controller.reset();
+                            break;
+                        case HELP:
+                            put.println(help);
+                            break;
+                        default:
+                            if (inGame) {
+                                cancel = true;
+                                game(cmd.getCmd());
+                            } else
+                                System.out.println("invalid command, try again");
+                            break;
+                    }
+                }
             } catch (Exception e) {
                 put.println("incorrect input");
             }
         }
         
+    }
+    
+    private void game(Commands cmd) {
+        System.out.println("command routed to ingame");
     }
     
     public void setInGame(Boolean value) {

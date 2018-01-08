@@ -36,7 +36,7 @@ public class Server implements Runnable {
     private static final int LINGER = 3000;
     private Game game;
     private MenuChanger view;
-    private final Queue<ByteBuffer> messageToSend = new ArrayDeque<>();
+    //private final Queue<ByteBuffer> messageToSend = new ArrayDeque<>();
     private ByteBuffer messageReceived = ByteBuffer.allocateDirect(Constants.MAX_LENGTH);
     private boolean stop = false;
 
@@ -72,7 +72,7 @@ public class Server implements Runnable {
         try {
             
             if(join)
-                connect(server);
+                connect(server, "helper");
             else
                 helper();
             serve();
@@ -86,17 +86,19 @@ public class Server implements Runnable {
         ByteBuffer message;
         SocketChannel channel = (SocketChannel) key.channel();
         try {
-            synchronized(messageToSend) {
-                //System.out.println("Head of queue in send: " + messageToSend.peek().toString());
-                while((message = messageToSend.poll()) != null) {
-                    
-                    if(message.hasRemaining())
+            Player player = (Player) key.attachment();
+            
+                while((message = player.getMessageToSend().poll()) != null) {
+                    //System.out.println("entered while sending.");
+                    channel.write(message);
+                    if(message.hasRemaining()) {
+                        System.out.println("send returned");
                         return;
+                    }
                 }
-                message = prepareMessage((String)key.attachment());
-                channel.write(message);
+                //message = prepareMessage((String)key.attachment());
+                
                 key.interestOps(SelectionKey.OP_READ);  
-            }
         } catch (IOException ex) {
             view.print("Couldn't send.");
         } catch(CancelledKeyException e) {
@@ -106,14 +108,13 @@ public class Server implements Runnable {
     }
     
     private void sendBroadcast(String message) {
-        synchronized(messageToSend) {
-            messageToSend.add(prepareMessage(message));
-            //System.out.println("Head of queue in broadcast: " + messageToSend.peek().toString());
-        }
         for (SelectionKey key : selector.keys()) {
             if (key.channel() instanceof SocketChannel && key.isValid()) {
+                Player player = (Player) key.attachment();
+                player.addMessage(prepareMessage(message));
+                key.attach(player);
                 key.interestOps(SelectionKey.OP_WRITE);
-                key.attach(message);
+                
             }
         }
     }
@@ -134,40 +135,32 @@ public class Server implements Runnable {
             String[] msg = verifyMessage(extractFromBuffer(messageReceived)).split(Constants.TYPE_DELIMITER);
             
             if (msg[0].equalsIgnoreCase(MessageTypes.JOIN.toString())) {
-                StringJoiner message = new StringJoiner(Constants.CONTENT_DELIMITER);
-                for (SelectionKey k : selector.keys()) {
-                    if (k.channel() instanceof SocketChannel && key.isValid()) {
-                        SocketChannel temp = (SocketChannel) k.channel();
-                        InetSocketAddress test = (InetSocketAddress) temp.getRemoteAddress();
-                        //System.out.println("sending key " + test.getHostString());
-                        message.add(test.getHostString());
-                    }
-                }
-                key.attach(MessageTypes.LOBBY + Constants.TYPE_DELIMITER + message.toString());
-                key.interestOps(SelectionKey.OP_WRITE);
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) {
+                if (msg.length != 2)
+                    throw new IOException();
+                Player player = convertToPlayer(msg[1]);
+                handleJoin(key, player);
+            } else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) { //selection from player received
                 view.print("choice");
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) {
+            } else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) { //player left
+                Player player = (Player) key.attachment();
+                game.removePlayer(player);
                 key.channel().close();
                 key.cancel();
-            } else if (msg[0].equalsIgnoreCase(MessageTypes.LOBBY.toString())) {
+            } else if (msg[0].equalsIgnoreCase(MessageTypes.LOBBY.toString())) { //received player in lobby
                 if (msg.length > 1 ) {
                     String[] players = msg[1].split(Constants.CONTENT_DELIMITER);
                     for (String player : players) {
                         //connect(new InetSocketAddress(player, Constants.listeningPort));
                         view.print(player);
                     }
-                    InetSocketAddress socket = (InetSocketAddress) serverChannel.getLocalAddress();
-                    StringJoiner joiner = new StringJoiner(":");
-                    joiner.add(socket.getHostString());
-                    joiner.add(Integer.toString(port));
-                    sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + joiner.toString());
+                    
+                    sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + selfAsData());
                 }
             } else if (msg[0].equalsIgnoreCase(MessageTypes.ENTER.toString())) {
-                view.setInGame(true);
+
                 if (msg.length != 2)
                     throw new IOException();
-                playerJoined(key, msg[1]);
+                playerJoined(key, convertToPlayer(msg[1]));
             } else {
                 view.print("unknown: " + msg[0]);
             }
@@ -176,12 +169,57 @@ public class Server implements Runnable {
         }
     }
     
-    private void playerJoined(SelectionKey key, String data) {
+    private void handleJoin(SelectionKey key, Player player) throws IOException {
+        StringJoiner message = new StringJoiner(Constants.CONTENT_DELIMITER);
+        for (SelectionKey k : selector.keys()) {
+            if (k.channel() instanceof SocketChannel && key.isValid() && k != key) {
+                SocketChannel socket = (SocketChannel) k.channel();
+                InetSocketAddress test = (InetSocketAddress) socket.getRemoteAddress();
+                //System.out.println("sending key " + test.getHostString());
+                Player play = (Player) k.attachment();
+                play.setHost(test.getHostString());
+                StringJoiner temp = new StringJoiner(Constants.FIELD_DELIMITER);
+                if( player != null) {
+                    temp.add(play.getName());
+                    temp.add(play.getHost());
+                    temp.add(Integer.toString(player.getPort()));
+                }
+                message.add(temp.toString());
+            }
+        }
+        player.addMessage(prepareMessage(MessageTypes.LOBBY + Constants.TYPE_DELIMITER + message.toString()));
+        playerJoined(key, player);
+        key.interestOps(SelectionKey.OP_WRITE);
+        
+    }
+    
+    private Player convertToPlayer(String data) throws IOException {
         try {
-            
+            String[] fields = data.split(Constants.FIELD_DELIMITER);
+            return new Player (fields[0], fields[1], Integer.parseInt(fields[2]));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        throw new IOException("faulty message");
+    }
+    
+    private void playerJoined(SelectionKey key, Player player) {
+        try {
+            key.attach(player);
+            view.setInGame(true);
+            game.addPlayer(player);
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
+    }
+    
+    private String selfAsData() throws IOException {
+        InetSocketAddress socket = (InetSocketAddress) serverChannel.getLocalAddress();
+                    StringJoiner joiner = new StringJoiner(Constants.FIELD_DELIMITER);
+                    joiner.add(game.getName());
+                    joiner.add(socket.getHostString());
+                    joiner.add(Integer.toString(port));
+        return joiner.toString();
     }
     
      private ByteBuffer prepareMessage(String message) {
@@ -238,11 +276,9 @@ public class Server implements Runnable {
                         SocketChannel channel = (SocketChannel) key.channel();
                         channel.finishConnect();
                         if (join) {
-                            synchronized(messageToSend) {
-                                messageToSend.add(prepareMessage(MessageTypes.JOIN.toString()));
-                                //System.out.println("Head of queue in serve: " + messageToSend.peek().toString());
-                            }
-                            key.attach(MessageTypes.JOIN.toString());
+                            Player player = (Player) key.attachment();
+                            player.addMessage(prepareMessage(MessageTypes.JOIN.toString() +
+                                    Constants.TYPE_DELIMITER + selfAsData()));
                             key.interestOps(SelectionKey.OP_WRITE);
                             join = false;
                         }
@@ -256,12 +292,15 @@ public class Server implements Runnable {
             }
     }
     
-    private void connect(InetSocketAddress endpoint) throws IOException {
-        //selector = Selector.open();
+    private void connect(InetSocketAddress endpoint, String name) throws IOException {
         SocketChannel channel = SocketChannel.open();
         channel.configureBlocking(false);
         channel.connect(endpoint);
         channel.register(selector, SelectionKey.OP_CONNECT);
+        Player player = new Player(name, endpoint.getHostString(), endpoint.getPort());
+        game.addPlayer(player);
+        channel.keyFor(selector).attach(player);
+        System.out.println("connecting to: " + player.getHost());
     }
     
     private void helper() throws IOException {

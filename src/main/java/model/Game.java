@@ -14,6 +14,7 @@ import protocol.GameSelections;
  * @author Bernardo
  */
 public class Game {
+
     private List<Player> players = new ArrayList();
     private int score = 0;
     private GameSelections choice;
@@ -102,5 +103,11 @@ public class Game {
         for (Player player : players) {
             player.setChoice(null);
         }
+    }
+    /**
+     * @return the name
+     */
+    public String getName() {
+        return name;
     }
 }

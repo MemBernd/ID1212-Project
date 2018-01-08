@@ -19,4 +19,6 @@ public class Constants {
     public static final int listeningPort = 54321;
     
     public static final int MAX_LENGTH = 8192;
+    
+    public static final String FIELD_DELIMITER = "::";
 }
