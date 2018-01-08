@@ -11,4 +11,5 @@ package model;
  */
 public interface MenuChanger {
     void startMenu();
+    void print(String message);
 }

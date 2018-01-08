@@ -17,4 +17,6 @@ public class Constants {
     public static final String LENGTH_DELIMITER = "##";
     
     public static final int listeningPort = 54321;
+    
+    public static final int MAX_LENGTH = 8192;
 }

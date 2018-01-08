@@ -7,16 +7,10 @@ package view;
 
 
 import controller.Controller;
-import java.io.File;
+
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.rmi.Naming;
-import java.rmi.NotBoundException;
-import java.rmi.RemoteException;
-import java.rmi.server.UnicastRemoteObject;
+
 import java.util.Scanner;
 import model.MenuChanger;
 import model.OutputHandler;
@@ -29,9 +23,11 @@ public class Interpreter extends Thread implements MenuChanger {
     private final Scanner consoleInput = new Scanner(System.in);
     private static final String PROMPT = "> ";
     private boolean exit = false;
+    private boolean cancel = false;
     private final PrintUsingThread put = new PrintUsingThread();
     private final ConsoleOutput output = new ConsoleOutput();
     private String playerName;
+    private int port;
     Controller controller = new Controller(this);
     
     private static final String help = "commands: " +
@@ -42,16 +38,28 @@ public class Interpreter extends Thread implements MenuChanger {
     @Override
     public void run() {
         put.println(help);
+
+        boolean incorrect = true;
+        while(incorrect) {
+            put.println("Port to use to listen: ");
+            try {
+                port = Integer.parseInt(readLine());
+                controller.init(port);
+                incorrect = false;
+            } catch (Exception e) {
+                put.println(e.getMessage());
+            }
+        }
         put.println("Type your player name:");
         playerName = readLine();
-        put.println(playerName);
         startMenu();
     }
 
     @Override
     public void startMenu() {
-        put.println("Start new game (new) or join existing one (join)");
+        
         while(!exit) {
+            put.println("Start new game (new) or join existing one (join)");
             CmdHandling cmd = new CmdHandling(readLine());
             //System.out.println(cmd.getCmd());
             switch (cmd.getCmd()) {
@@ -60,10 +68,11 @@ public class Interpreter extends Thread implements MenuChanger {
                     break;
                 case NEW:
                     newGame();
+                    cancel = false;
                     break;
                 case JOIN:
                     joinGame();
-
+                    cancel = false;
                     break;
                 case HELP:
                     put.println(help);
@@ -77,17 +86,57 @@ public class Interpreter extends Thread implements MenuChanger {
     }
     
     private void newGame() {
-        controller.hostGame();
+        try {
+            controller.hostGame();
+            put.println("waiting for player to connect. [cancel] to return to startmenu");
+            while(!cancel) {
+                CmdHandling cmd = new CmdHandling(readLine());
+                //System.out.println(cmd.getCmd());
+                switch (cmd.getCmd()) {
+                    case QUIT:
+                        exit = true;
+                        break;
+                    case CANCEL:
+                        cancel = true;
+                        controller.reset();
+                        break;
+                    case HELP:
+                        put.println(help);
+                        break;
+                    default:    
+                        System.out.println("invalid command, try again");
+                        break;
+                }
+            }
+        } catch (Exception e) {
+            put.println(e.getMessage());
+        }
     }
     
     private void joinGame() {
-        put.println("address of a node playing:");
-        controller.joinGame(readLine());
+        boolean incorrect = true;
+        String[] text;
+         while(incorrect) {
+            put.println("address:port of a node playing:");
+            try {
+                text = readLine().split(":");
+                port = Integer.parseInt(text[1]);
+                incorrect = false;
+                controller.joinGame(text[0], port);
+            } catch (Exception e) {
+                put.println("incorrect input");
+            }
+        }
+        
     }
     
     private String readLine() {
         put.print(PROMPT);
         return consoleInput.nextLine();
+    }
+    
+    public void print (String message) {
+        put.println(message);
     }
 
     private class ConsoleOutput implements OutputHandler{

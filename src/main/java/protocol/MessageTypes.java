@@ -12,6 +12,8 @@ package protocol;
 public enum MessageTypes {
     JOIN,
     
+    ENTER,
+    
     LEAVE,
     
     CHOICE,

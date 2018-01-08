@@ -5,6 +5,7 @@
  */
 package controller;
 
+import java.io.IOException;
 import model.MenuChanger;
 import model.Server;
 
@@ -20,11 +21,22 @@ public class Controller {
         this.view = view;
     }
     
-    public void hostGame() {
-        server = new Server(view);
+    public void init(int port) {
+        server = new Server(view, port);
     }
     
-    public void joinGame(String node) {
-        server = new Server(view, node);
+    public void hostGame() {
+        server.host();
+        new Thread(server).start();
+    }
+    
+    public void joinGame(String node, int port) {
+        server.join(node, port);
+        new Thread(server).start();
+    }
+    
+    public void reset() throws IOException {
+        //cleaning
+        server.reset();
     }
 }
