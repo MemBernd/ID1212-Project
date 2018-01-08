@@ -25,6 +25,7 @@ import java.util.StringJoiner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import protocol.Constants;
+import protocol.GameSelections;
 import protocol.MessageTypes;
 
 /**
@@ -118,6 +119,10 @@ public class Server implements Runnable {
             }
         }
     }
+    
+    public void sendChoice() {
+        sendBroadcast(MessageTypes.CHOICE + Constants.TYPE_DELIMITER + game.getChoice().toString());
+    }
 
     private void receiveMessage(SelectionKey key) throws IOException {
         messageReceived.clear();
@@ -140,7 +145,13 @@ public class Server implements Runnable {
                 Player player = convertToPlayer(msg[1]);
                 handleJoin(key, player);
             } else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) { //selection from player received
-                view.print("choice");
+                //view.print("choice");
+                Player player = (Player) key.attachment();
+                player.setChoice(GameSelections.valueOf(msg[1].toUpperCase()));
+                if (game.isRoundOver()) {
+                    view.print("Round: " + game.pointsAwarded() + " Total: " + game.getScore());
+                    game.newRound();
+                }
             } else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) { //player left
                 Player player = (Player) key.attachment();
                 game.removePlayer(player);
@@ -150,14 +161,15 @@ public class Server implements Runnable {
                 if (msg.length > 1 ) {
                     String[] players = msg[1].split(Constants.CONTENT_DELIMITER);
                     for (String player : players) {
-                        //connect(new InetSocketAddress(player, Constants.listeningPort));
-                        view.print(player);
+                        connect(convertToPlayer(player));
+                        //view.print(player);
                     }
-                    
+                   
                     sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + selfAsData());
+                    
                 }
+                view.setInGame(true);
             } else if (msg[0].equalsIgnoreCase(MessageTypes.ENTER.toString())) {
-
                 if (msg.length != 2)
                     throw new IOException();
                 playerJoined(key, convertToPlayer(msg[1]));
@@ -298,6 +310,16 @@ public class Server implements Runnable {
         channel.connect(endpoint);
         channel.register(selector, SelectionKey.OP_CONNECT);
         Player player = new Player(name, endpoint.getHostString(), endpoint.getPort());
+        game.addPlayer(player);
+        channel.keyFor(selector).attach(player);
+        System.out.println("connecting to: " + player.getHost());
+    }
+    
+    private void connect(Player player) throws IOException {
+        SocketChannel channel = SocketChannel.open();
+        channel.configureBlocking(false);
+        channel.connect(new InetSocketAddress(player.getHost(), player.getPort()));
+        channel.register(selector, SelectionKey.OP_CONNECT);
         game.addPlayer(player);
         channel.keyFor(selector).attach(player);
         System.out.println("connecting to: " + player.getHost());

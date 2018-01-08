@@ -9,6 +9,7 @@ import java.io.IOException;
 import model.Game;
 import model.MenuChanger;
 import model.Server;
+import protocol.GameSelections;
 
 /**
  *
@@ -41,5 +42,14 @@ public class Controller {
     public void reset() throws IOException {
         //cleaning
         server.reset();
+    }
+    
+    public void sendChoice(GameSelections choice) {
+        game.setChoice(choice);
+        server.sendChoice();
+        if (game.isRoundOver()) {
+            view.print("Round: " + game.pointsAwarded() + " Total: " + game.getScore());
+            game.newRound();
+        }
     }
 }

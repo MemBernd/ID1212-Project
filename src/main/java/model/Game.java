@@ -39,6 +39,10 @@ public class Game {
         this.choice = choice;
     }
     
+    public GameSelections getChoice () {
+        return choice;
+    }
+    
     public boolean isRoundOver() {
         if(choice == null)
             return false;

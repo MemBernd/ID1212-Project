@@ -7,6 +7,7 @@ package view;
 
 
 import controller.Controller;
+import java.io.IOException;
 
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
@@ -14,6 +15,7 @@ import java.net.MalformedURLException;
 import java.util.Scanner;
 import model.MenuChanger;
 import model.OutputHandler;
+import protocol.GameSelections;
 
 /**
  *
@@ -35,9 +37,9 @@ public class Interpreter extends Thread implements MenuChanger {
                 "\nquit: quit" +
                 "\nhelp: help";
     private static final String playMessage = "Select: " +
-                        "\n[1] Rock" +
-                        "\n[2] Paper" +
-                        "\n[3] Scissors" +
+                        "\n[rock]" +
+                        "\n[paper]" +
+                        "\n[scissor]" +
                         "\n[cancel] to leave";
 
 
@@ -110,8 +112,7 @@ public class Interpreter extends Thread implements MenuChanger {
                         break;
                     default:
                         if (inGame) {
-                            cancel = true;
-                            game(cmd.getCmd());
+                            game(cmd);
                         } else
                             System.out.println("invalid command, try again");
                         break;
@@ -150,8 +151,8 @@ public class Interpreter extends Thread implements MenuChanger {
                             break;
                         default:
                             if (inGame) {
-                                cancel = true;
-                                game(cmd.getCmd());
+                                
+                                game(cmd);
                             } else
                                 System.out.println("invalid command, try again");
                             break;
@@ -164,8 +165,32 @@ public class Interpreter extends Thread implements MenuChanger {
         
     }
     
-    private void game(Commands cmd) {
-        System.out.println("command routed to ingame");
+    private void game(CmdHandling cmd) throws IOException {
+        while(!cancel) {
+            
+            //System.out.println(cmd.getCmd());
+            switch (cmd.getCmd()) {
+                case QUIT:
+                    exit = true;
+                    break;
+                case CANCEL:
+                    cancel = true;
+                    controller.reset();
+                    break;
+                case HELP:
+                    output.printMessage(help);
+                    break;
+                default:
+                    try {
+                        GameSelections choice = GameSelections.valueOf(cmd.getEnteredCommand().toUpperCase());
+                        controller.sendChoice(choice);
+                    } catch (Exception e) {
+                        output.printMessage("Invalid command. Try again.");
+                    }
+                    break;
+            }
+            cmd = new CmdHandling(readLine());
+        }
     }
     
     public void setInGame(Boolean value) {
