@@ -12,4 +12,6 @@ package model;
 public interface MenuChanger {
     void startMenu();
     void print(String message);
+    void setInGame(Boolean set);
+    void printPlayMessage();
 }

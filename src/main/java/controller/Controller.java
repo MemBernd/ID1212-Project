@@ -6,6 +6,7 @@
 package controller;
 
 import java.io.IOException;
+import model.Game;
 import model.MenuChanger;
 import model.Server;
 
@@ -16,13 +17,15 @@ import model.Server;
 public class Controller {
     MenuChanger view;
     Server server;
+    Game game;
     
     public Controller (MenuChanger view) {
         this.view = view;
     }
     
-    public void init(int port) {
-        server = new Server(view, port);
+    public void init(int port, String name) throws IOException {
+        game = new Game(name);
+        server = new Server(view, port, game);
     }
     
     public void hostGame() {

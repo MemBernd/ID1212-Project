@@ -24,6 +24,7 @@ public class Interpreter extends Thread implements MenuChanger {
     private static final String PROMPT = "> ";
     private boolean exit = false;
     private boolean cancel = false;
+    private boolean inGame = false;
     private final PrintUsingThread put = new PrintUsingThread();
     private final ConsoleOutput output = new ConsoleOutput();
     private String playerName;
@@ -33,25 +34,29 @@ public class Interpreter extends Thread implements MenuChanger {
     private static final String help = "commands: " +
                 "\nquit: quit" +
                 "\nhelp: help";
+    private static final String playMessage = "Select: " +
+                        "\n[1] Rock" +
+                        "\n[2] Paper" +
+                        "\n[3] Scissors" +
+                        "\n[cancel] to leave";
 
 
     @Override
     public void run() {
         put.println(help);
-
+        put.println("Type your player name:");
+        playerName = readLine();
         boolean incorrect = true;
         while(incorrect) {
             put.println("Port to use to listen: ");
             try {
                 port = Integer.parseInt(readLine());
-                controller.init(port);
+                controller.init(port, playerName);
                 incorrect = false;
             } catch (Exception e) {
                 put.println(e.getMessage());
             }
         }
-        put.println("Type your player name:");
-        playerName = readLine();
         startMenu();
     }
 
@@ -103,8 +108,12 @@ public class Interpreter extends Thread implements MenuChanger {
                     case HELP:
                         put.println(help);
                         break;
-                    default:    
-                        System.out.println("invalid command, try again");
+                    default:
+                        if (inGame) {
+                            cancel = true;
+                            System.out.println("command routed to ingame");
+                        } else
+                            System.out.println("invalid command, try again");
                         break;
                 }
             }
@@ -128,6 +137,18 @@ public class Interpreter extends Thread implements MenuChanger {
             }
         }
         
+    }
+    
+    public void setInGame(Boolean value) {
+        output.printMessage("Player connected.");
+        if(!inGame)
+            printPlayMessage();
+        
+        inGame = value;
+    }
+    
+    public void printPlayMessage() {
+        output.printMessage(playMessage);
     }
     
     private String readLine() {

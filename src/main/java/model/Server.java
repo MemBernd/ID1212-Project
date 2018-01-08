@@ -34,7 +34,7 @@ import protocol.MessageTypes;
 public class Server implements Runnable {
     private int port;
     private static final int LINGER = 3000;
-    private static final int TIMEOUT_LONG = 1200000;
+    private Game game;
     private MenuChanger view;
     private final Queue<ByteBuffer> messageToSend = new ArrayDeque<>();
     private ByteBuffer messageReceived = ByteBuffer.allocateDirect(Constants.MAX_LENGTH);
@@ -47,9 +47,14 @@ public class Server implements Runnable {
 
     private Boolean join;
     
-    public Server(MenuChanger view, int port) {
+    public Server(MenuChanger view, int port, Game game) throws IOException {
+        this.game = game;
         this.view = view;
         this.port = port;
+        selector = Selector.open();
+        serverChannel = ServerSocketChannel.open();
+        serverChannel.configureBlocking(false);
+        serverChannel.bind(new InetSocketAddress(port));
     }
     
     public void host() {
@@ -65,7 +70,7 @@ public class Server implements Runnable {
     @Override
     public void run() {
         try {
-            selector = Selector.open();
+            
             if(join)
                 connect(server);
             else
@@ -73,25 +78,25 @@ public class Server implements Runnable {
             serve();
             
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println(e.getCause().toString());
         }
-    }
-    
-
-    
-    public void reply(SocketChannel client) {
-        client.keyFor(selector).interestOps(SelectionKey.OP_WRITE);
-        selector.wakeup();
     }
     
     private void sendToNode(SelectionKey key) {
         ByteBuffer message;
         SocketChannel channel = (SocketChannel) key.channel();
         try {
-
-           message = prepareMessage((String)key.attachment());
-            channel.write(message);
-             key.interestOps(SelectionKey.OP_READ);  
+            synchronized(messageToSend) {
+                //System.out.println("Head of queue in send: " + messageToSend.peek().toString());
+                while((message = messageToSend.poll()) != null) {
+                    
+                    if(message.hasRemaining())
+                        return;
+                }
+                message = prepareMessage((String)key.attachment());
+                channel.write(message);
+                key.interestOps(SelectionKey.OP_READ);  
+            }
         } catch (IOException ex) {
             view.print("Couldn't send.");
         } catch(CancelledKeyException e) {
@@ -103,8 +108,8 @@ public class Server implements Runnable {
     private void sendBroadcast(String message) {
         synchronized(messageToSend) {
             messageToSend.add(prepareMessage(message));
+            //System.out.println("Head of queue in broadcast: " + messageToSend.peek().toString());
         }
-        //sendNow = true;
         for (SelectionKey key : selector.keys()) {
             if (key.channel() instanceof SocketChannel && key.isValid()) {
                 key.interestOps(SelectionKey.OP_WRITE);
@@ -116,9 +121,14 @@ public class Server implements Runnable {
     private void receiveMessage(SelectionKey key) throws IOException {
         messageReceived.clear();
         SocketChannel channel = (SocketChannel) key.channel();
-        int readBytes = channel.read(messageReceived);
-        if (readBytes == -1) {
-            throw new IOException("Lost connection");
+        try {
+            int readBytes = channel.read(messageReceived);
+        
+            if (readBytes == -1) {
+                throw new IOException("Lost connection");
+            }
+        } catch (IOException e) {
+            System.out.println(e.getCause().toString());
         }
         try {
             String[] msg = verifyMessage(extractFromBuffer(messageReceived)).split(Constants.TYPE_DELIMITER);
@@ -136,7 +146,7 @@ public class Server implements Runnable {
                 key.attach(MessageTypes.LOBBY + Constants.TYPE_DELIMITER + message.toString());
                 key.interestOps(SelectionKey.OP_WRITE);
             } else if (msg[0].equalsIgnoreCase(MessageTypes.CHOICE.toString())) {
-                view.print("choioce");
+                view.print("choice");
             } else if (msg[0].equalsIgnoreCase(MessageTypes.LEAVE.toString())) {
                 key.channel().close();
                 key.cancel();
@@ -147,13 +157,30 @@ public class Server implements Runnable {
                         //connect(new InetSocketAddress(player, Constants.listeningPort));
                         view.print(player);
                     }
-                    //view.startMenu();
+                    InetSocketAddress socket = (InetSocketAddress) serverChannel.getLocalAddress();
+                    StringJoiner joiner = new StringJoiner(":");
+                    joiner.add(socket.getHostString());
+                    joiner.add(Integer.toString(port));
+                    sendBroadcast(MessageTypes.ENTER.toString() + Constants.TYPE_DELIMITER + joiner.toString());
                 }
+            } else if (msg[0].equalsIgnoreCase(MessageTypes.ENTER.toString())) {
+                view.setInGame(true);
+                if (msg.length != 2)
+                    throw new IOException();
+                playerJoined(key, msg[1]);
             } else {
                 view.print("unknown: " + msg[0]);
             }
         } catch (IOException e) {
-            view.print(e.getMessage());
+            view.print(e.getCause().toString());
+        }
+    }
+    
+    private void playerJoined(SelectionKey key, String data) {
+        try {
+            
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
     }
     
@@ -211,6 +238,10 @@ public class Server implements Runnable {
                         SocketChannel channel = (SocketChannel) key.channel();
                         channel.finishConnect();
                         if (join) {
+                            synchronized(messageToSend) {
+                                messageToSend.add(prepareMessage(MessageTypes.JOIN.toString()));
+                                //System.out.println("Head of queue in serve: " + messageToSend.peek().toString());
+                            }
                             key.attach(MessageTypes.JOIN.toString());
                             key.interestOps(SelectionKey.OP_WRITE);
                             join = false;
@@ -234,17 +265,16 @@ public class Server implements Runnable {
     }
     
     private void helper() throws IOException {
-       serverChannel = ServerSocketChannel.open();
-       serverChannel.configureBlocking(false);
-       serverChannel.bind(new InetSocketAddress(port));
+       
        serverChannel.register(selector, SelectionKey.OP_ACCEPT);
     }
     
     public void reset() throws IOException {
         for (SelectionKey key : selector.keys()) {
-
+            if (key.channel() instanceof SocketChannel && key.isValid()) {
                 key.channel().close();
                 key.cancel();
+            }
         }
         stop = true;
     }
